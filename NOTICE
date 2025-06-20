@@ -1,0 +1,9 @@
+This project depends on the Live555 Streaming Media library,
+which is licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0).
+
+Live555 is not distributed with this project. Users must obtain it separately.
+
+You can view the Live555 source and license at:
+
+Source: https://github.com/melchi45/live555
+License: https://github.com/melchi45/live555/blob/master/COPYING.LESSER
