@@ -430,3 +430,106 @@ int main() {
 	return 0;
 }
 ```
+
+### Python
+```python
+import os
+from ctypes import c_char_p, c_int64, c_uint, c_bool, c_uint8, c_int, c_short, c_float, c_ulonglong, POINTER, cdll, cast, CFUNCTYPE
+
+class NeonClient:
+    
+    def __init__(self, url):
+        self.lib = cdll.LoadLibrary(os.path.join(os.path.dirname(__file__), r"libs\pl-rtsp-service.dll"))
+        
+        self._logCallbackType = CFUNCTYPE(None, c_char_p)
+        self._rawDataCallbackType = CFUNCTYPE(None, c_int64, c_bool, c_uint8, c_uint8, c_uint, POINTER(c_uint8))
+        self._logCallbackFunc = None
+        self._dataCallbackFunc = None
+        
+        self.lib.pl_start_worker.argtypes = [c_char_p, c_uint8, self._logCallbackType, self._rawDataCallbackType]
+        self.lib.pl_start_worker.restype = c_short
+        self.lib.pl_stop_service.argtypes = []
+        self.lib.pl_stop_service.restype = None
+        self.lib.pl_bytes_to_imu_data.argtypes = [POINTER(c_uint8), c_uint, POINTER(c_ulonglong), POINTER(c_float), POINTER(c_float), POINTER(c_float)]
+        self.lib.pl_bytes_to_imu_data.restype = c_int
+        
+        self.url = url
+        return
+        
+    def bytesToImuData(self, data, size, tsNsPtr, accelData, gyroData, quatData):
+        return self.lib.pl_bytes_to_imu_data(data, size, tsNsPtr, accelData, gyroData, quatData)
+        
+    def startWorker(self, mask, logCallback, dataCallback):
+        self._logCallbackFunc = self._logCallbackType(logCallback) if logCallback is not None else cast(logCallback, self._logCallbackType)
+        self._dataCallbackFunc = self._rawDataCallbackType(dataCallback) if dataCallback is not None else cast(dataCallback, self._rawDataCallbackType)
+        self.lib.pl_start_worker(
+            self.url.encode('utf-8'),
+            mask,
+            self._logCallbackFunc,
+            self._dataCallbackFunc
+        )
+        return
+        
+    def stop(self):
+        self.lib.pl_stop_service()
+        return
+
+if __name__=="__main__":
+    import matplotlib.pyplot as plt
+    import time
+    from ctypes import byref
+    
+    nc = NeonClient("rtsp://192.168.1.27:8086")
+    accel = [[],[],[]]
+    gyro = [[],[],[]]
+    
+    def logCallback(message):
+        print(message)
+        return
+    
+    def dataCallback(timestampMs, rtcpSynchronized, streamId, payloadFormat, dataSize, data):
+        if streamId == 0: #recording IMU data only
+            tsNs = c_ulonglong(0)
+            accelData = (c_float * 3)()
+            gyroData = (c_float * 3)()
+            quatData = (c_float * 4)()
+            res = nc.bytesToImuData(data, dataSize, byref(tsNs), accelData, gyroData, quatData)
+            if res == 0:
+                for i in range(3):
+                    accel[i].append(accelData[i])
+                    gyro[i].append(gyroData[i])
+        #data = bytes(cast(data, POINTER(c_uint8 * dataSize)).contents)
+        return
+    
+    #record data for ~5 seconds
+    nc.startWorker(1, logCallback, dataCallback)
+    time.sleep(5)
+    nc.stop()
+    
+    #plot results
+    tm = list(range(len(accel[0])))
+    
+    fig, (axAcc, axGyro) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    axAcc.set_ylim(-1, 2)
+    axAcc.plot(tm, accel[0], label='X-axis')
+    axAcc.plot(tm, accel[1], label='Y-axis')
+    axAcc.plot(tm, accel[2], label='Z-axis')
+    axAcc.set_ylabel('Acceleration (m/s²)')
+    axAcc.set_title('Acceleration Data Over Time')
+    axAcc.legend()
+    axAcc.grid(True)
+    
+    #axGyro.set_ylim(-7, 7)
+    axGyro.plot(tm, gyro[0], label='X-axis')
+    axGyro.plot(tm, gyro[1], label='Y-axis')
+    axGyro.plot(tm, gyro[2], label='Z-axis')
+    axGyro.set_xlabel('Sample Index')
+    axGyro.set_ylabel('Gyro (deg/s)')
+    axGyro.set_title('Gyro Data Over Time')
+    axGyro.legend()
+    axGyro.grid(True)
+    
+    fig.tight_layout()
+    plt.show()
+```
