@@ -1,4 +1,4 @@
-# pl-releatime-cpp-client
+# pl-realtime-cpp-client
 This is a lightweight library built on Live555 that runs inside your application, serving as the Pupil Labs Real-Time client. It exhibits service-like behavior by managing RTSP-based live streaming across one or more background threads with start/stop control, delivering data asynchronously via callbacks. This is a library component, not a standalone OS service or daemon.
 
 ## Building Live555 library
