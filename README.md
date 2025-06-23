@@ -1,4 +1,4 @@
-# pl-rtsp-service
+# pl-releatime-cpp-client
 This is a lightweight library built on Live555 that runs inside your application, serving as the Pupil Labs Real-Time client. It exhibits service-like behavior by managing RTSP-based live streaming across one or more background threads with start/stop control, delivering data asynchronously via callbacks. This is a library component, not a standalone OS service or daemon.
 
 ## Building Live555 library
@@ -11,7 +11,7 @@ This is a lightweight library built on Live555 that runs inside your application
 7. built dll can be found in build\vs2022\Debug
 
 ## Building the RTSP service
-1. clone this repository (pl-rtsp-service and live555 repositories should be in the same folder)
+1. clone this repository (pl-releatime-cpp-client and live555 repositories should be in the same folder)
 2. open VS solution
 3. build
 
