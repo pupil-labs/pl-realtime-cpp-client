@@ -89,13 +89,11 @@ class CallbackSink : public MediaSink {
 public:
 	static CallbackSink* createNew(UsageEnvironment& env,
 		MediaSubsession& subsession, // identifies the kind of data that's being received
-		RawDataCallback dataCallback,
 		DataPostprocessor dataPostprocessor,
-		u_int8_t streamId,
 		u_int8_t payloadFormat);
 
 private:
-	CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, RawDataCallback dataCallback, DataPostprocessor dataPostprocessor, u_int8_t streamId, u_int8_t payloadFormat);
+	CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor, u_int8_t payloadFormat);
 	// called only by "createNew()"
 	virtual ~CallbackSink();
 
@@ -109,13 +107,11 @@ private:
 private:
 	// redefined virtual functions:
 	virtual Boolean continuePlaying();
-	RawDataCallback dataCallback;
 	DataPostprocessor dataPostprocessor;
 
 private:
 	u_int8_t* fReceiveBuffer;
 	MediaSubsession& fSubsession;
-	const u_int8_t fStreamId;
 	const u_int8_t fPayloadFormat;
 };
 
@@ -287,7 +283,7 @@ static void continueAfterSETUP(RTSPClient* rtspClient, int resultCode, char* res
 			continue;
 		}
 
-		scs.subsession->sink = CallbackSink::createNew(env, *scs.subsession, oRtspClient->dataCallback, dataPostprocessor, streamId, payloadFormat);
+		scs.subsession->sink = CallbackSink::createNew(env, *scs.subsession, dataPostprocessor, payloadFormat);
 		// perhaps use your own custom "MediaSink" subclass instead
 		if (scs.subsession->sink == NULL) {
 			env << *rtspClient << "Failed to create a data sink for the \"" << *scs.subsession
@@ -479,17 +475,15 @@ StreamClientState::~StreamClientState() {
 // Define the size of the buffer that we'll use:
 #define CALLBACK_SINK_RECEIVE_BUFFER_SIZE 100000
 
-CallbackSink* CallbackSink::createNew(UsageEnvironment& env, MediaSubsession& subsession, RawDataCallback dataCallback, DataPostprocessor dataPostprocessor, u_int8_t streamId, u_int8_t payloadFormat) {
-	return new CallbackSink(env, subsession, dataCallback, dataPostprocessor, streamId, payloadFormat);
+CallbackSink* CallbackSink::createNew(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor, u_int8_t payloadFormat) {
+	return new CallbackSink(env, subsession, dataPostprocessor, payloadFormat);
 }
 
-CallbackSink::CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, RawDataCallback dataCallback, DataPostprocessor dataPostprocessor, u_int8_t streamId, u_int8_t payloadFormat)
+CallbackSink::CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor, u_int8_t payloadFormat)
 	: MediaSink(env),
 	fSubsession(subsession),
-	fStreamId(streamId),
 	fPayloadFormat(payloadFormat) {
 	fReceiveBuffer = new u_int8_t[CALLBACK_SINK_RECEIVE_BUFFER_SIZE];
-	this->dataCallback = dataCallback;
 	this->dataPostprocessor = dataPostprocessor;
 }
 
@@ -512,7 +506,8 @@ void CallbackSink::afterGettingFrame(unsigned frameSize, unsigned numTruncatedBy
 		frameSize = processed.size();
 		std::copy(processed.begin(), processed.end(), fReceiveBuffer);
 	}
-	dataCallback(presentationTime.tv_sec * 1000ll + presentationTime.tv_usec / 1000, fSubsession.rtpSource()->hasBeenSynchronizedUsingRTCP(), fStreamId, fPayloadFormat, frameSize, fReceiveBuffer);
+	ourRTSPClient* oRtspClient = (ourRTSPClient*)fSubsession.miscPtr;
+	oRtspClient->dataCallback(presentationTime.tv_sec * 1000ll + presentationTime.tv_usec / 1000, fSubsession.rtpSource()->hasBeenSynchronizedUsingRTCP(), oRtspClient->id, fPayloadFormat, frameSize, fReceiveBuffer);
 
 	// Then continue, to request the next frame of data:
 	continuePlaying();
