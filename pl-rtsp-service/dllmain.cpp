@@ -19,11 +19,9 @@ static void continueAfterPLAY(RTSPClient* rtspClient, int resultCode, char* resu
 static void subsessionAfterPlaying(void* clientData); // called when a stream's subsession (e.g., audio or video substream) ends
 static void subsessionByeHandler(void* clientData, char const* reason);
 // called when a RTCP "BYE" is received for a subsession
-static void streamTimerHandler(void* clientData);
-// called at the end of a stream's expected duration (if the stream has not already signaled its end using a RTCP "BYE")
 
 // The main streaming routine (for each "rtsp://" URL):
-static RTSPClient* openURL(UsageEnvironment& env, char const* progName, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback);
+static RTSPClient* openURL(UsageEnvironment& env, char const* progName, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback, void* userData);
 
 // Used to iterate through each stream's 'subsessions', setting up each one:
 static void setupNextSubsession(RTSPClient* rtspClient);
@@ -31,12 +29,12 @@ static void setupNextSubsession(RTSPClient* rtspClient);
 // Used to shut down and close a stream (including its "RTSPClient" object):
 static void shutdownStream(RTSPClient* rtspClient, int exitCode = 1);
 
-// A function that outputs a string that identifies each stream (for debugging output).  Modify this if you wish:
+// A function that outputs a string that identifies each stream (for debugging output).
 UsageEnvironment& operator<<(UsageEnvironment& env, const RTSPClient& rtspClient) {
 	return env << "[URL:\"" << rtspClient.url() << "\"]: ";
 }
 
-// A function that outputs a string that identifies each subsession (for debugging output).  Modify this if you wish:
+// A function that outputs a string that identifies each subsession (for debugging output).
 UsageEnvironment& operator<<(UsageEnvironment& env, const MediaSubsession& subsession) {
 	return env << subsession.mediumName() << "/" << subsession.codecName();
 }
@@ -52,48 +50,39 @@ public:
 	MediaSubsessionIterator* iter;
 	MediaSession* session;
 	MediaSubsession* subsession;
-	TaskToken streamTimerTask;
-	double duration;
 };
-
-// If you're streaming just a single stream (i.e., just from a single URL, once), then you can define and use just a single
-// "StreamClientState" structure, as a global variable in your application.  However, because - in this demo application - we're
-// showing how to play multiple streams, concurrently, we can't do that.  Instead, we have to have a separate "StreamClientState"
-// structure for each "RTSPClient".  To do this, we subclass "RTSPClient", and add a "StreamClientState" field to the subclass:
 
 class ourRTSPClient : public RTSPClient {
 public:
-	static ourRTSPClient* createNew(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback,
+	static ourRTSPClient* createNew(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback, void* userData,
 		int verbosityLevel = 0,
 		char const* applicationName = NULL,
 		portNumBits tunnelOverHTTPPortNum = 0);
-	RawDataCallback dataCallback = NULL;
 
 protected:
-	ourRTSPClient(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback,
+	ourRTSPClient(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback, void* userData,
 		int verbosityLevel, char const* applicationName, portNumBits tunnelOverHTTPPortNum);
 	// called only by createNew();
 	virtual ~ourRTSPClient();
 
 public:
+	RawDataCallback dataCallback = NULL;
+	void* userData = NULL;
 	StreamClientState scs;
 	const u_int8_t id = 0;
 	std::atomic<char>& statusRef;
 };
 
 // Define a data sink (a subclass of "MediaSink") to receive the data for each subsession (i.e., each audio or video 'substream').
-// In practice, this might be a class (or a chain of classes) that decodes and then renders the incoming audio or video.
-// Or it might be a "FileSink", for outputting the received data into a file (as is done by the "openRTSP" application).
 
 class CallbackSink : public MediaSink {
 public:
 	static CallbackSink* createNew(UsageEnvironment& env,
 		MediaSubsession& subsession, // identifies the kind of data that's being received
-		DataPostprocessor dataPostprocessor,
-		u_int8_t payloadFormat);
+		DataPostprocessor dataPostprocessor);
 
 private:
-	CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor, u_int8_t payloadFormat);
+	CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor);
 	// called only by "createNew()"
 	virtual ~CallbackSink();
 
@@ -112,17 +101,16 @@ private:
 private:
 	u_int8_t* fReceiveBuffer;
 	MediaSubsession& fSubsession;
-	const u_int8_t fPayloadFormat;
 };
 
 #define RTSP_MAX_WORKER_COUNT 5
-#define RTSP_MAX_CLIENT_COUNT 5 //potentially gaze, imu, eyes, world - currently gaze and world only
+#define RTSP_MAX_CLIENT_COUNT 5 //imu, world, gaze, eye events, eyes
 #define RTSP_CLIENT_VERBOSITY_LEVEL 1 // by default, print verbose output from each "RTSPClient"
 
-static RTSPClient* openURL(UsageEnvironment& env, char const* progName, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback) {
+static RTSPClient* openURL(UsageEnvironment& env, char const* progName, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback, void* userData) {
 	// Begin by creating a "RTSPClient" object.  Note that there is a separate "RTSPClient" object for each stream that we wish
 	// to receive (even if more than stream uses the same "rtsp://" URL).
-	ourRTSPClient* rtspClient = ourRTSPClient::createNew(env, rtspURL, id, statusRef, dataCallback, RTSP_CLIENT_VERBOSITY_LEVEL, progName);
+	ourRTSPClient* rtspClient = ourRTSPClient::createNew(env, rtspURL, id, statusRef, dataCallback, userData, RTSP_CLIENT_VERBOSITY_LEVEL, progName);
 	if (rtspClient == NULL) {
 		env << "Failed to create a RTSP client for URL \"" << rtspURL << "\": " << env.getResultMsg() << "\n";
 		return NULL;
@@ -220,7 +208,6 @@ static void setupNextSubsession(RTSPClient* rtspClient) {
 		rtspClient->sendPlayCommand(*scs.session, continueAfterPLAY, scs.session->absStartTime(), scs.session->absEndTime());
 	}
 	else {
-		scs.duration = scs.session->playEndTime() - scs.session->playStartTime();
 		rtspClient->sendPlayCommand(*scs.session, continueAfterPLAY);
 	}
 }
@@ -251,7 +238,6 @@ static void continueAfterSETUP(RTSPClient* rtspClient, int resultCode, char* res
 
 		DataPostprocessor dataPostprocessor = NULL;
 		const unsigned char payloadFormat = scs.subsession->rtpPayloadFormat();
-		const u_int8_t streamId = oRtspClient->id;
 		switch (payloadFormat)
 		{
 		case(PF_AUDIO):
@@ -272,7 +258,7 @@ static void continueAfterSETUP(RTSPClient* rtspClient, int resultCode, char* res
 			for (size_t i = 0; i < n; i++)
 			{
 				std::vector<u_int8_t> processed = processNalUnit(record[i].sPropLength, record[i].sPropBytes);
-				oRtspClient->dataCallback(0, false, streamId, payloadFormat, processed.size(), processed.data());
+				oRtspClient->dataCallback(0, false, oRtspClient->id, payloadFormat, processed.size(), processed.data(), oRtspClient->userData);
 			}
 			delete[] record;
 			dataPostprocessor = processNalUnit;
@@ -283,8 +269,7 @@ static void continueAfterSETUP(RTSPClient* rtspClient, int resultCode, char* res
 			continue;
 		}
 
-		scs.subsession->sink = CallbackSink::createNew(env, *scs.subsession, dataPostprocessor, payloadFormat);
-		// perhaps use your own custom "MediaSink" subclass instead
+		scs.subsession->sink = CallbackSink::createNew(env, *scs.subsession, dataPostprocessor);
 		if (scs.subsession->sink == NULL) {
 			env << *rtspClient << "Failed to create a data sink for the \"" << *scs.subsession
 				<< "\" subsession: " << env.getResultMsg() << "\n";
@@ -312,29 +297,13 @@ static void continueAfterPLAY(RTSPClient* rtspClient, int resultCode, char* resu
 	do {
 		UsageEnvironment& env = rtspClient->envir(); // alias
 		ourRTSPClient* oRtspClient = (ourRTSPClient*)rtspClient;
-		StreamClientState& scs = oRtspClient->scs; // alias
 
 		if (resultCode != 0) {
 			env << *rtspClient << "Failed to start playing session: " << resultString << "\n";
 			break;
 		}
 
-		// Set a timer to be handled at the end of the stream's expected duration (if the stream does not already signal its end
-		// using a RTCP "BYE").  This is optional.  If, instead, you want to keep the stream active - e.g., so you can later
-		// 'seek' back within it and do another RTSP "PLAY" - then you can omit this code.
-		// (Alternatively, if you don't want to receive the entire stream, you could set this timer for some shorter value.)
-		if (scs.duration > 0) {
-			unsigned const delaySlop = 2; // number of seconds extra to delay, after the stream's expected duration.  (This is optional.)
-			scs.duration += delaySlop;
-			unsigned uSecsToDelay = (unsigned)(scs.duration * 1000000);
-			scs.streamTimerTask = env.taskScheduler().scheduleDelayedTask(uSecsToDelay, (TaskFunc*)streamTimerHandler, rtspClient);
-		}
-
-		env << *rtspClient << "Started playing session";
-		if (scs.duration > 0) {
-			env << " (for up to " << scs.duration << " seconds)";
-		}
-		env << "...\n";
+		env << *rtspClient << "Started playing session\n";
 
 		oRtspClient->statusRef = SST_PLAY_SUCCESS;
 		success = True;
@@ -385,16 +354,6 @@ static void subsessionByeHandler(void* clientData, char const* reason) {
 	subsessionAfterPlaying(subsession);
 }
 
-static void streamTimerHandler(void* clientData) {
-	ourRTSPClient* rtspClient = (ourRTSPClient*)clientData;
-	StreamClientState& scs = rtspClient->scs; // alias
-
-	scs.streamTimerTask = NULL;
-
-	// Shut down the stream:
-	shutdownStream(rtspClient);
-}
-
 static void shutdownStream(RTSPClient* rtspClient, int exitCode) {
 	UsageEnvironment& env = rtspClient->envir(); // alias
 	ourRTSPClient* oRtspClient = (ourRTSPClient*)rtspClient;
@@ -436,15 +395,16 @@ static void shutdownStream(RTSPClient* rtspClient, int exitCode) {
 
 // Implementation of "ourRTSPClient":
 
-ourRTSPClient* ourRTSPClient::createNew(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback,
+ourRTSPClient* ourRTSPClient::createNew(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback, void* userData,
 	int verbosityLevel, char const* applicationName, portNumBits tunnelOverHTTPPortNum) {
-	return new ourRTSPClient(env, rtspURL, id, statusRef, dataCallback, verbosityLevel, applicationName, tunnelOverHTTPPortNum);
+	return new ourRTSPClient(env, rtspURL, id, statusRef, dataCallback, userData, verbosityLevel, applicationName, tunnelOverHTTPPortNum);
 }
 
-ourRTSPClient::ourRTSPClient(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback,
+ourRTSPClient::ourRTSPClient(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback, void* userData,
 	int verbosityLevel, char const* applicationName, portNumBits tunnelOverHTTPPortNum)
 	: RTSPClient(env, rtspURL, verbosityLevel, applicationName, tunnelOverHTTPPortNum, -1), statusRef(statusRef), id(id) {
 	this->dataCallback = dataCallback;
+	this->userData = userData;
 }
 
 ourRTSPClient::~ourRTSPClient() {
@@ -454,16 +414,12 @@ ourRTSPClient::~ourRTSPClient() {
 // Implementation of "StreamClientState":
 
 StreamClientState::StreamClientState()
-	: iter(NULL), session(NULL), subsession(NULL), streamTimerTask(NULL), duration(0.0) {
+	: iter(NULL), session(NULL), subsession(NULL) {
 }
 
 StreamClientState::~StreamClientState() {
 	delete iter;
 	if (session != NULL) {
-		// We also need to delete "session", and unschedule "streamTimerTask" (if set)
-		UsageEnvironment& env = session->envir(); // alias
-
-		env.taskScheduler().unscheduleDelayedTask(streamTimerTask);
 		Medium::close(session);
 	}
 }
@@ -471,18 +427,16 @@ StreamClientState::~StreamClientState() {
 
 // Implementation of "CallbackSink":
 
-// Even though we're not going to be doing anything with the incoming data, we still need to receive it.
 // Define the size of the buffer that we'll use:
-#define CALLBACK_SINK_RECEIVE_BUFFER_SIZE 100000
+#define CALLBACK_SINK_RECEIVE_BUFFER_SIZE 200000
 
-CallbackSink* CallbackSink::createNew(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor, u_int8_t payloadFormat) {
-	return new CallbackSink(env, subsession, dataPostprocessor, payloadFormat);
+CallbackSink* CallbackSink::createNew(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor) {
+	return new CallbackSink(env, subsession, dataPostprocessor);
 }
 
-CallbackSink::CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor, u_int8_t payloadFormat)
+CallbackSink::CallbackSink(UsageEnvironment& env, MediaSubsession& subsession, DataPostprocessor dataPostprocessor)
 	: MediaSink(env),
-	fSubsession(subsession),
-	fPayloadFormat(payloadFormat) {
+	fSubsession(subsession) {
 	fReceiveBuffer = new u_int8_t[CALLBACK_SINK_RECEIVE_BUFFER_SIZE];
 	this->dataPostprocessor = dataPostprocessor;
 }
@@ -499,15 +453,13 @@ void CallbackSink::afterGettingFrame(void* clientData, unsigned frameSize, unsig
 
 void CallbackSink::afterGettingFrame(unsigned frameSize, unsigned numTruncatedBytes,
 	struct timeval presentationTime, unsigned /*durationInMicroseconds*/) {
-	// We've just received a frame of data.  (Optionally) print out information about it:
-
 	if (dataPostprocessor != NULL) {
 		std::vector<u_int8_t> processed = dataPostprocessor(frameSize, fReceiveBuffer);
 		frameSize = processed.size();
 		std::copy(processed.begin(), processed.end(), fReceiveBuffer);
 	}
 	ourRTSPClient* oRtspClient = (ourRTSPClient*)fSubsession.miscPtr;
-	oRtspClient->dataCallback(presentationTime.tv_sec * 1000ll + presentationTime.tv_usec / 1000, fSubsession.rtpSource()->hasBeenSynchronizedUsingRTCP(), oRtspClient->id, fPayloadFormat, frameSize, fReceiveBuffer);
+	oRtspClient->dataCallback(presentationTime.tv_sec * 1000ll + presentationTime.tv_usec / 1000, fSubsession.rtpSource()->hasBeenSynchronizedUsingRTCP(), oRtspClient->id, fSubsession.rtpPayloadFormat(), frameSize, fReceiveBuffer, oRtspClient->userData);
 
 	// Then continue, to request the next frame of data:
 	continuePlaying();
@@ -527,7 +479,7 @@ class RTSPWorker
 {
 public:
 	~RTSPWorker();
-	void Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback);
+	void Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
 	void Stop();
 	bool isIdle = true;
 	std::atomic<char> clientStatus[RTSP_MAX_CLIENT_COUNT] = { SST_UNINITIALIZED };
@@ -537,6 +489,7 @@ private:
 	RawDataCallback dataCallback = NULL;
 	TaskScheduler* scheduler = NULL;
 	UsageEnvironment* env = NULL;
+	void* userData = NULL;
 	volatile char watchVariable = 0;
 	std::thread workerThread;
 	u_int8_t streamMask = 0;
@@ -549,7 +502,7 @@ RTSPWorker::~RTSPWorker()
 	Stop();
 }
 
-void RTSPWorker::Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback)
+void RTSPWorker::Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData)
 {
 	isIdle = false;
 	if (workerThread.joinable()) {
@@ -558,9 +511,10 @@ void RTSPWorker::Start(const char* baseUrl, u_int8_t streamMask, LogCallback log
 	this->baseUrl = std::string(baseUrl);
 	this->streamMask = streamMask;
 	this->dataCallback = dataCallback;
+	this->userData = userData;
 	watchVariable = 0;
 	scheduler = BasicTaskScheduler::createNew();
-	env = LoggingUsageEnvironment::createNew(*scheduler, logCallback);
+	env = LoggingUsageEnvironment::createNew(*scheduler, logCallback, userData);
 	workerThread = std::thread(&RTSPWorker::DoWork, this);
 }
 
@@ -591,7 +545,7 @@ void RTSPWorker::DoWork()
 	{
 		if ((streamMask >> i) & 1) {
 			appName[0] = snprintf(appName, sizeof(appName), "RTSPClient_%d", i);
-			clients[i] = openURL(*env, appName, (baseUrl + urlParameters[i]).c_str(), i, clientStatus[i], dataCallback);
+			clients[i] = openURL(*env, appName, (baseUrl + urlParameters[i]).c_str(), i, clientStatus[i], dataCallback, userData);
 		}
 	}
 
@@ -611,7 +565,7 @@ class RTSPClientService
 {
 public:
 	~RTSPClientService();
-	short StartWorker(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback);
+	short StartWorker(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
 	void StopWorker(u_int8_t id);
 	void Stop();
 
@@ -624,12 +578,12 @@ RTSPClientService::~RTSPClientService()
 	Stop();
 }
 
-short RTSPClientService::StartWorker(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback)
+short RTSPClientService::StartWorker(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData)
 {
 	for (u_int8_t i = 0; i < RTSP_MAX_WORKER_COUNT; i++)
 	{
 		if (workers[i].isIdle) {
-			workers[i].Start(baseUrl, streamMask, logCallback, dataCallback);
+			workers[i].Start(baseUrl, streamMask, logCallback, dataCallback, userData);
 			return i;
 		}
 	}
@@ -809,8 +763,8 @@ static std::vector<u_int8_t> processNalUnit(unsigned int size, const u_int8_t* u
 
 static RTSPClientService service;
 
-short pl_start_worker(const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback) {
-	return service.StartWorker(url, streamMask, logCallback, dataCallback);
+short pl_start_worker(const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData) {
+	return service.StartWorker(url, streamMask, logCallback, dataCallback, userData);
 }
 
 void pl_stop_worker(u_int8_t id) {

@@ -11,7 +11,14 @@
 #endif
 
 typedef unsigned char u_int8_t;
-typedef void (*LogCallback)(const char* message);
+
+/**
+ * @brief Function pointer type for callbacks handling log messages.
+ *
+ * @param[in] message   Null-terminated string containing the log message.
+ * @param[in] userData  Pointer to user-defined data or context.
+ */
+typedef void (*LogCallback)(const char* message, void* userData);
 
 /**
  * @brief Function pointer type for callbacks handling raw data received by a worker.
@@ -22,8 +29,9 @@ typedef void (*LogCallback)(const char* message);
  * @param[in] payloadFormat     Format of the payload (see RTPPayloadFormat).
  * @param[in] dataSize          Size of the data in bytes.
  * @param[in] data              Pointer to the raw data buffer.
+ * @param[in] userData          Pointer to user-defined data or context.
  */
-typedef void (*RawDataCallback)(int64_t timestampMs, bool rtcpSynchronized, u_int8_t streamId, u_int8_t payloadFormat, unsigned int dataSize, const u_int8_t* data);
+typedef void (*RawDataCallback)(int64_t timestampMs, bool rtcpSynchronized, u_int8_t streamId, u_int8_t payloadFormat, unsigned int dataSize, const u_int8_t* data, void* userData);
 
 enum EyeEventType {
 	EET_SACCADE = 0,
@@ -149,10 +157,11 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_imu_data(
  * @param[in] streamMask    Bitmask indicating which streams to enable (LSB first: [imu | world | gaze | eye_events | eyes | x | x | x]).
  * @param[in] logCallback   Callback function invoked for logging events.
  * @param[in] dataCallback  Callback function invoked when new data is received.
+ * @param[in] userData      Pointer to user-defined data or context that will be passed to both callbacks.
  *
  * @return ID of the created worker thread, or -1 on failure.
  */
-extern "C" PLRTSPSERVICE_API short pl_start_worker(const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback);
+extern "C" PLRTSPSERVICE_API short pl_start_worker(const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
 
 /**
  * @brief Stops a specific worker thread.

@@ -1,8 +1,9 @@
 #include "LoggingUsageEnvironment.hh"
 #include <stdio.h>
 
-LoggingUsageEnvironment::LoggingUsageEnvironment(TaskScheduler& taskScheduler, LogCallback callback) : BasicUsageEnvironment(taskScheduler) {
+LoggingUsageEnvironment::LoggingUsageEnvironment(TaskScheduler& taskScheduler, LogCallback callback, void* userData) : BasicUsageEnvironment(taskScheduler) {
 	this->callback = callback;
+	this->userData = userData;
 	std::memset(buffer, 0, BUFFER_SIZE);
 }
 
@@ -14,7 +15,7 @@ void LoggingUsageEnvironment::writeFormatted(const char* format, ...) {
 		if (len > 0 && len < BUFFER_SIZE) { //process only not empty messages that can fit the buffer
 			if (bufferOffset + len >= BUFFER_SIZE) { //flush buffer if remaining space is not sufficient
 				bufferOffset = 0;
-				callback(buffer);
+				callback(buffer, userData);
 			}
 #ifdef __ANDROID__
 			bufferOffset += vsprintf(buffer + bufferOffset, format, args);
@@ -23,15 +24,15 @@ void LoggingUsageEnvironment::writeFormatted(const char* format, ...) {
 #endif
 			if (buffer[bufferOffset - 1] == '\n') { //flush each line
 				bufferOffset = 0;
-				callback(buffer);
+				callback(buffer, userData);
 			}
 		}
 		va_end(args);
 	}
 }
 
-LoggingUsageEnvironment* LoggingUsageEnvironment::createNew(TaskScheduler& taskScheduler, LogCallback callback) {
-	LoggingUsageEnvironment* env = new LoggingUsageEnvironment(taskScheduler, callback);
+LoggingUsageEnvironment* LoggingUsageEnvironment::createNew(TaskScheduler& taskScheduler, LogCallback callback, void* userData) {
+	LoggingUsageEnvironment* env = new LoggingUsageEnvironment(taskScheduler, callback, userData);
 	return env;
 }
 
