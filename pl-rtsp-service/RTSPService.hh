@@ -100,7 +100,8 @@ enum RTPPayloadFormat {
  */
 extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_tracking_data(
 	const u_int8_t* bytes,
-	const unsigned int size,
+	unsigned int size,
+	unsigned int offset,
 	float* gazePoint, bool* worn,
 	float* gazePointDualRight,
 	float* eyeStateLeft, float* eyeStateRight,
@@ -122,7 +123,8 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_tracking_data(
  */
 extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_event_data(
 	const u_int8_t* bytes,
-	const unsigned int size,
+	unsigned int size,
+	unsigned int offset,
 	int* eventType, long long* startTime,
 	long long* endTime,
 	float* gazeEvent
@@ -144,6 +146,7 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_event_data(
 extern "C" PLRTSPSERVICE_API int pl_bytes_to_imu_data(
 	const u_int8_t* bytes,
 	unsigned int size,
+	unsigned int offset,
 	unsigned long long* tsNs,
 	float* accelData,
 	float* gyroData,
@@ -151,24 +154,33 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_imu_data(
 );
 
 /**
+ * @brief Acquires a free worker thread.
+ *
+ * @return The ID of a free worker thread, or -1 if none are available.
+ */
+extern "C" PLRTSPSERVICE_API short pl_acquire_worker();
+
+/**
  * @brief Starts a worker thread that handles multiple data streams.
  *
+ * @param[in] id            Identifier of the idle worker thread.
  * @param[in] url           Pointer to a null-terminated string representing the RTSP stream URL.
  * @param[in] streamMask    Bitmask indicating which streams to enable (LSB first: [imu | world | gaze | eye_events | eyes | x | x | x]).
  * @param[in] logCallback   Callback function invoked for logging events.
  * @param[in] dataCallback  Callback function invoked when new data is received.
  * @param[in] userData      Pointer to user-defined data or context that will be passed to both callbacks.
  *
- * @return ID of the created worker thread, or -1 on failure.
+ * @return 0 on success, or a non-zero error code on failure.
  */
-extern "C" PLRTSPSERVICE_API short pl_start_worker(const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
+extern "C" PLRTSPSERVICE_API int pl_start_worker(u_int8_t id, const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
 
 /**
  * @brief Stops a specific worker thread.
  *
- * @param[in] id    Identifier of the worker thread to stop.
+ * @param[in] id       Identifier of the worker thread to stop.
+ * @param[in] release  If true, the worker will be marked as available after stopping.
  */
-extern "C" PLRTSPSERVICE_API void pl_stop_worker(u_int8_t id);
+extern "C" PLRTSPSERVICE_API void pl_stop_worker(u_int8_t id, bool release);
 
 /**
  * @brief Stops all worker threads and frees allocated resources.

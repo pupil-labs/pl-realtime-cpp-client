@@ -402,7 +402,7 @@ ourRTSPClient* ourRTSPClient::createNew(UsageEnvironment& env, char const* rtspU
 
 ourRTSPClient::ourRTSPClient(UsageEnvironment& env, char const* rtspURL, u_int8_t id, std::atomic<char>& statusRef, RawDataCallback dataCallback, void* userData,
 	int verbosityLevel, char const* applicationName, portNumBits tunnelOverHTTPPortNum)
-	: RTSPClient(env, rtspURL, verbosityLevel, applicationName, tunnelOverHTTPPortNum, -1), statusRef(statusRef), id(id) {
+	: RTSPClient(env, rtspURL, verbosityLevel, applicationName, tunnelOverHTTPPortNum, -1), id(id), statusRef(statusRef) {
 	this->dataCallback = dataCallback;
 	this->userData = userData;
 }
@@ -479,9 +479,8 @@ class RTSPWorker
 {
 public:
 	~RTSPWorker();
-	void Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
+	int Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
 	void Stop();
-	bool isIdle = true;
 	std::atomic<char> clientStatus[RTSP_MAX_CLIENT_COUNT] = { SST_UNINITIALIZED };
 
 private:
@@ -493,6 +492,7 @@ private:
 	volatile char watchVariable = 0;
 	std::thread workerThread;
 	u_int8_t streamMask = 0;
+	bool isIdle = true;
 
 	void DoWork();
 };
@@ -502,11 +502,10 @@ RTSPWorker::~RTSPWorker()
 	Stop();
 }
 
-void RTSPWorker::Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData)
+int RTSPWorker::Start(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData)
 {
-	isIdle = false;
-	if (workerThread.joinable()) {
-		Stop();
+	if (isIdle == false) {
+		return -1;
 	}
 	this->baseUrl = std::string(baseUrl);
 	this->streamMask = streamMask;
@@ -516,6 +515,7 @@ void RTSPWorker::Start(const char* baseUrl, u_int8_t streamMask, LogCallback log
 	scheduler = BasicTaskScheduler::createNew();
 	env = LoggingUsageEnvironment::createNew(*scheduler, logCallback, userData);
 	workerThread = std::thread(&RTSPWorker::DoWork, this);
+	return 0;
 }
 
 void RTSPWorker::Stop()
@@ -565,12 +565,14 @@ class RTSPClientService
 {
 public:
 	~RTSPClientService();
-	short StartWorker(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
-	void StopWorker(u_int8_t id);
+	short AcquireWorker();
+	int StartWorker(u_int8_t id, const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
+	void StopWorker(u_int8_t id, bool release);
 	void Stop();
 
 private:
 	RTSPWorker workers[RTSP_MAX_WORKER_COUNT];
+	bool acquired[RTSP_MAX_WORKER_COUNT];
 };
 
 RTSPClientService::~RTSPClientService()
@@ -578,28 +580,35 @@ RTSPClientService::~RTSPClientService()
 	Stop();
 }
 
-short RTSPClientService::StartWorker(const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData)
-{
+short RTSPClientService::AcquireWorker() {
 	for (u_int8_t i = 0; i < RTSP_MAX_WORKER_COUNT; i++)
 	{
-		if (workers[i].isIdle) {
-			workers[i].Start(baseUrl, streamMask, logCallback, dataCallback, userData);
+		if (acquired[i] == false) {
+			acquired[i] = true;
 			return i;
 		}
 	}
 	return -1;
 }
 
-void RTSPClientService::StopWorker(u_int8_t id)
+int RTSPClientService::StartWorker(u_int8_t id, const char* baseUrl, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData)
+{
+	return workers[id].Start(baseUrl, streamMask, logCallback, dataCallback, userData);
+}
+
+void RTSPClientService::StopWorker(u_int8_t id, bool release)
 {
 	workers[id].Stop();
+	if (release) {
+		acquired[id] = false;
+	}
 }
 
 void RTSPClientService::Stop()
 {
 	for (u_int8_t i = 0; i < RTSP_MAX_WORKER_COUNT; i++)
 	{
-		StopWorker(i);
+		StopWorker(i, true);
 	}
 }
 
@@ -763,12 +772,17 @@ static std::vector<u_int8_t> processNalUnit(unsigned int size, const u_int8_t* u
 
 static RTSPClientService service;
 
-short pl_start_worker(const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData) {
-	return service.StartWorker(url, streamMask, logCallback, dataCallback, userData);
+short pl_acquire_worker()
+{
+	return service.AcquireWorker();
 }
 
-void pl_stop_worker(u_int8_t id) {
-	service.StopWorker(id);
+int pl_start_worker(u_int8_t id, const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData) {
+	return service.StartWorker(id, url, streamMask, logCallback, dataCallback, userData);
+}
+
+void pl_stop_worker(u_int8_t id, bool release) {
+	service.StopWorker(id, release);
 }
 
 void pl_stop_service() {
@@ -778,12 +792,13 @@ void pl_stop_service() {
 int pl_bytes_to_eye_tracking_data(
 	const u_int8_t* bytes,
 	unsigned int size,
+	unsigned int offset,
 	float* gazePoint, bool* worn,
 	float* gazePointDualRight,
 	float* eyeStateLeft, float* eyeStateRight,
 	float* eyelidLeft, float* eyelidRight
 ) {
-	int currentPos = 0;
+	int currentPos = offset;
 	currentPos = bytesToFloats(gazePoint, bytes, currentPos, 2);
 	currentPos = bytesToBooleans(worn, bytes, currentPos, 1);
 	if (currentPos == size) {
@@ -798,8 +813,8 @@ int pl_bytes_to_eye_tracking_data(
 	if (currentPos == size) {
 		return EDT_EYE_STATE_GAZE_DATA;
 	}
-	currentPos = bytesToFloats(eyelidLeft, bytes, currentPos, 6);
-	currentPos = bytesToFloats(eyelidRight, bytes, currentPos, 6);
+	currentPos = bytesToFloats(eyelidLeft, bytes, currentPos, 3);
+	currentPos = bytesToFloats(eyelidRight, bytes, currentPos, 3);
 	if (currentPos == size) {
 		return EDT_EYE_STATE_EYELID_GAZE_DATA;
 	}
@@ -809,12 +824,13 @@ int pl_bytes_to_eye_tracking_data(
 int pl_bytes_to_eye_event_data(
 	const u_int8_t* bytes,
 	unsigned int size,
+	unsigned int offset,
 	int* eventType, long long* startTime,
 	long long* endTime,
 	float* gazeEvent
 ) {
 	int dataTypeByEventType[] = { EEDT_FIXATION_DATA, EEDT_FIXATION_DATA, EEDT_FIXATION_ONSET_DATA, EEDT_FIXATION_ONSET_DATA, EEDT_BLINK_DATA };
-	int currentPos = 0;
+	int currentPos = offset;
 	currentPos = bytesToInts(eventType, bytes, currentPos, 1);
 	int et = *eventType;
 	int eedt = EEDT_UNKNOWN;
@@ -839,6 +855,7 @@ int pl_bytes_to_eye_event_data(
 int pl_bytes_to_imu_data(
 	const u_int8_t* bytes,
 	unsigned int size,
+	unsigned int offset,
 	unsigned long long* tsNs,
 	float* accelData,
 	float* gyroData,
@@ -872,6 +889,6 @@ int pl_bytes_to_imu_data(
 	};
 	void* ptrMap[] = { tsNs, accelPtr, gyroPtr, quatPtr };
 
-	parseProtobufMsg(ptrMap, bytes, 0, size);
+	parseProtobufMsg(ptrMap, bytes + offset, 0, size - offset);
 	return 0;
 }
