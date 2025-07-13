@@ -489,7 +489,7 @@ private:
 	TaskScheduler* scheduler = NULL;
 	UsageEnvironment* env = NULL;
 	void* userData = NULL;
-	volatile char watchVariable = 0;
+	EventLoopWatchVariable watchVariable = 0;
 	std::thread workerThread;
 	u_int8_t streamMask = 0;
 	bool isIdle = true;
