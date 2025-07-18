@@ -849,8 +849,8 @@ int pl_bytes_to_eye_tracking_data(
 	if (currentPos == size) {
 		return EDT_EYE_STATE_GAZE_DATA;
 	}
-	currentPos = bytesToFloats(eyelidLeft, bytes, currentPos, 6);
-	currentPos = bytesToFloats(eyelidRight, bytes, currentPos, 6);
+	currentPos = bytesToFloats(eyelidLeft, bytes, currentPos, 3);
+	currentPos = bytesToFloats(eyelidRight, bytes, currentPos, 3);
 	if (currentPos == size) {
 		return EDT_EYE_STATE_EYELID_GAZE_DATA;
 	}
