@@ -42,21 +42,21 @@ static Concurrency::concurrent_queue<std::vector<u_int8_t>> imuQueue;
 static Concurrency::concurrent_queue<std::vector<u_int8_t>> videoQueue;
 static Concurrency::concurrent_queue<std::vector<u_int8_t>> audioQueue;
 
-void logCallback(const char* message) {
+void logCallback(const char* message, void* /*userData*/) {
 	std::cout << message;
 }
 
 void imuCallback(int64_t timestampMs, unsigned int dataSize, const u_int8_t* data) {
 	imuMutex.lock();
 	unsigned long long tsNs = 0;
-	pl_bytes_to_imu_data(data, dataSize, &tsNs, accelData, NULL, NULL);
+	pl_bytes_to_imu_data(data, dataSize, 0, &tsNs, accelData, NULL, NULL);
 	imuMutex.unlock();
 	//std::cout << "RECEIVED IMU DATA AT: " << timestampMs << " NS: " << tsNs << std::endl;
 }
 
 void gazeCallback(int64_t timestampMs, unsigned int dataSize, const u_int8_t* data) {
 	gazePointMutex.lock();
-	pl_bytes_to_eye_tracking_data(data, dataSize, gazePoint, NULL, NULL, NULL, NULL, NULL, NULL);
+	pl_bytes_to_eye_tracking_data(data, dataSize, 0, gazePoint, NULL, NULL, NULL, NULL, NULL, NULL);
 	gazePointMutex.unlock();
 	//std::cout << "RECEIVED GAZE DATA AT: " << timestampMs << std::endl;
 }
@@ -75,7 +75,7 @@ void audioCallback(int64_t timestampMs, unsigned int dataSize, const u_int8_t* d
 
 void eyeEventsCallback(int64_t timestampMs, unsigned int dataSize, const u_int8_t* data) {
 	int eyeEventType = 0;
-	pl_bytes_to_eye_event_data(data, dataSize, &eyeEventType, NULL, NULL, NULL);
+	pl_bytes_to_eye_event_data(data, dataSize, 0, &eyeEventType, NULL, NULL, NULL);
 	if (eyeEventType == EyeEventType::EET_FIXATION_ONSET) {
 		fixationOnSet = true;
 	}
@@ -85,7 +85,7 @@ void eyeEventsCallback(int64_t timestampMs, unsigned int dataSize, const u_int8_
 	//std::cout << "RECEIVED EYE EVENT DATA AT: " << timestampMs << std::endl;
 }
 
-void dataCallback(int64_t timestampMs, bool rtcpSynchronized, u_int8_t streamId, u_int8_t payloadFormat, unsigned int dataSize, const u_int8_t* data) {
+void dataCallback(int64_t timestampMs, bool rtcpSynchronized, u_int8_t streamId, u_int8_t payloadFormat, unsigned int dataSize, const u_int8_t* data, void* /*userData*/) {
 	//std::cout << "RECEIVED DATA FROM STREAM: " << unsigned(streamId) << " FORMAT: " << unsigned(payloadFormat) << " SIZE: " << dataSize << std::endl;
 	if (streamId == StreamId::SID_WORLD) {
 		if (payloadFormat == RTPPayloadFormat::PF_VIDEO) {
@@ -351,7 +351,8 @@ int main() {
 	float gazePointCopy[2] = { 0 };
 	float accelDataCopy[3] = { 0 };
 
-	short workerId = pl_start_worker("rtsp://192.168.1.27:8086", (1 << StreamId::SID_EYE_EVENTS) | (1 << StreamId::SID_IMU) | (1 << StreamId::SID_GAZE) | (1 << StreamId::SID_WORLD), logCallback, dataCallback);
+	short workerId = pl_acquire_worker();
+	int res = pl_start_worker(workerId, "rtsp://192.168.1.27:8086", (1 << StreamId::SID_EYE_EVENTS) | (1 << StreamId::SID_IMU) | (1 << StreamId::SID_GAZE) | (1 << StreamId::SID_WORLD), logCallback, dataCallback, NULL);
 
 	if (workerId < 0) {
 		return -1;
@@ -425,7 +426,7 @@ int main() {
 	audioDecoder = NULL;
 	cv::destroyAllWindows();
 
-	pl_stop_service();
+	pl_stop_worker(workerId, true);
 
 	return 0;
 }
@@ -434,41 +435,48 @@ int main() {
 ### Python
 ```python
 import os
-from ctypes import c_char_p, c_int64, c_uint, c_bool, c_uint8, c_int, c_short, c_float, c_ulonglong, POINTER, cdll, cast, CFUNCTYPE
+from ctypes import c_void_p, c_char_p, c_int64, c_uint, c_bool, c_uint8, c_int, c_short, c_float, c_ulonglong, POINTER, cdll, cast, CFUNCTYPE
 
 class NeonClient:
     
     def __init__(self, url):
         self.lib = cdll.LoadLibrary(os.path.join(os.path.dirname(__file__), r"libs\pl-rtsp-service.dll"))
         
-        self._logCallbackType = CFUNCTYPE(None, c_char_p)
-        self._rawDataCallbackType = CFUNCTYPE(None, c_int64, c_bool, c_uint8, c_uint8, c_uint, POINTER(c_uint8))
+        self._logCallbackType = CFUNCTYPE(None, c_char_p, c_void_p)
+        self._rawDataCallbackType = CFUNCTYPE(None, c_int64, c_bool, c_uint8, c_uint8, c_uint, POINTER(c_uint8), c_void_p)
         self._logCallbackFunc = None
         self._dataCallbackFunc = None
         
-        self.lib.pl_start_worker.argtypes = [c_char_p, c_uint8, self._logCallbackType, self._rawDataCallbackType]
-        self.lib.pl_start_worker.restype = c_short
+        self.lib.pl_acquire_worker.restype = c_short
+        self.lib.pl_start_worker.argtypes = [c_uint8, c_char_p, c_uint8, self._logCallbackType, self._rawDataCallbackType, c_void_p]
+        self.lib.pl_start_worker.restype = c_int
         self.lib.pl_stop_service.argtypes = []
         self.lib.pl_stop_service.restype = None
-        self.lib.pl_bytes_to_imu_data.argtypes = [POINTER(c_uint8), c_uint, POINTER(c_ulonglong), POINTER(c_float), POINTER(c_float), POINTER(c_float)]
+        self.lib.pl_bytes_to_imu_data.argtypes = [POINTER(c_uint8), c_uint, c_uint, POINTER(c_ulonglong), POINTER(c_float), POINTER(c_float), POINTER(c_float)]
         self.lib.pl_bytes_to_imu_data.restype = c_int
         
         self.url = url
         return
         
-    def bytesToImuData(self, data, size, tsNsPtr, accelData, gyroData, quatData):
-        return self.lib.pl_bytes_to_imu_data(data, size, tsNsPtr, accelData, gyroData, quatData)
+    def bytesToImuData(self, data, size, offset, tsNsPtr, accelData, gyroData, quatData):
+        return self.lib.pl_bytes_to_imu_data(data, size, offset, tsNsPtr, accelData, gyroData, quatData)
         
-    def startWorker(self, mask, logCallback, dataCallback):
+    def startWorker(self, mask, logCallback, dataCallback, userData):
         self._logCallbackFunc = self._logCallbackType(logCallback) if logCallback is not None else cast(logCallback, self._logCallbackType)
         self._dataCallbackFunc = self._rawDataCallbackType(dataCallback) if dataCallback is not None else cast(dataCallback, self._rawDataCallbackType)
-        self.lib.pl_start_worker(
-            self.url.encode('utf-8'),
-            mask,
-            self._logCallbackFunc,
-            self._dataCallbackFunc
-        )
-        return
+        workerId = self.lib.pl_acquire_worker()
+        if workerId >= 0:
+            res = self.lib.pl_start_worker(
+                workerId,
+                self.url.encode('utf-8'),
+                mask,
+                self._logCallbackFunc,
+                self._dataCallbackFunc,
+                userData
+            )
+            if res == 0:
+                return workerId
+        return -1
         
     def stop(self):
         self.lib.pl_stop_service()
@@ -483,26 +491,25 @@ if __name__=="__main__":
     accel = [[],[],[]]
     gyro = [[],[],[]]
     
-    def logCallback(message):
+    def logCallback(message, userData):
         print(message)
         return
     
-    def dataCallback(timestampMs, rtcpSynchronized, streamId, payloadFormat, dataSize, data):
+    def dataCallback(timestampMs, rtcpSynchronized, streamId, payloadFormat, dataSize, data, userData):
         if streamId == 0: #recording IMU data only
             tsNs = c_ulonglong(0)
             accelData = (c_float * 3)()
             gyroData = (c_float * 3)()
             quatData = (c_float * 4)()
-            res = nc.bytesToImuData(data, dataSize, byref(tsNs), accelData, gyroData, quatData)
+            res = nc.bytesToImuData(data, dataSize, 0, byref(tsNs), accelData, gyroData, quatData)
             if res == 0:
                 for i in range(3):
                     accel[i].append(accelData[i])
                     gyro[i].append(gyroData[i])
-        #data = bytes(cast(data, POINTER(c_uint8 * dataSize)).contents)
         return
     
     #record data for ~5 seconds
-    nc.startWorker(1, logCallback, dataCallback)
+    nc.startWorker(1, logCallback, dataCallback, None)
     time.sleep(5)
     nc.stop()
     
