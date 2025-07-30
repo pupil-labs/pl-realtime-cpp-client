@@ -81,7 +81,6 @@ static float accelData[3] = { 0 };
 static std::atomic<bool> fixationOnSet = false;
 static std::mutex imuMutex;
 static std::mutex gazePointMutex;
-static Concurrency::concurrent_queue<std::vector<u_int8_t>> imuQueue;
 static Concurrency::concurrent_queue<std::vector<u_int8_t>> videoQueue;
 static Concurrency::concurrent_queue<std::vector<u_int8_t>> audioQueue;
 
