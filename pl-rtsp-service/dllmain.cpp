@@ -4,6 +4,7 @@
 #include <mutex>
 #include "RTSPService.hh"
 #include <vector>
+#include <chrono>
 
 typedef std::vector<u_int8_t>(*DataPostprocessor)(unsigned int size, const u_int8_t* unit);
 
@@ -891,4 +892,10 @@ int pl_bytes_to_imu_data(
 
 	parseProtobufMsg(ptrMap, bytes + offset, 0, size - offset);
 	return 0;
+}
+
+int64_t pl_time_ms()
+{
+	auto now = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
+	return now.time_since_epoch().count();
 }

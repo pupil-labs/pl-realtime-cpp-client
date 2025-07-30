@@ -186,3 +186,10 @@ extern "C" PLRTSPSERVICE_API void pl_stop_worker(u_int8_t id, bool release);
  * @brief Stops all worker threads and frees allocated resources.
  */
 extern "C" PLRTSPSERVICE_API void pl_stop_service();
+
+/**
+ * @brief Returns the number of milliseconds elapsed since the Unix epoch (January 1, 1970, 00:00:00 UTC).
+ *
+ * @return Milliseconds since the Unix epoch.
+ */
+extern "C" PLRTSPSERVICE_API int64_t pl_time_ms();
