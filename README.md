@@ -17,7 +17,50 @@ This is a lightweight library built on Live555 that runs inside your application
 
 ## Usage Examples
 
-### C++
+### C++ Minimal
+```cpp
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <RTSPService.hh>
+
+void logCallback(const char* message, void* /*userData*/) {
+	std::cout << message;
+}
+
+void dataCallback(int64_t timestampMs, bool rtcpSynchronized, u_int8_t streamId, u_int8_t payloadFormat, unsigned int dataSize, const u_int8_t* data, void* /*userData*/) {
+	std::cout << "Received data from stream: " << streamId << " Format: " << payloadFormat << " Size: " << dataSize << std::endl;
+	if (streamId == StreamId::SID_IMU) {
+		unsigned long long tsNs = 0;
+		float accelData[3] = { 0 };
+		pl_bytes_to_imu_data(data, dataSize, 0, &tsNs, accelData, NULL, NULL);
+		std::cout << "IMU Data - Timestamp: " << timestampMs << " Accel: [" << accelData[0] << ", " << accelData[1] << ", " << accelData[2] << "]" << std::endl;
+	}
+	else if (streamId == StreamId::SID_GAZE) {
+		float gazePoint[2] = { 0 };
+		pl_bytes_to_eye_tracking_data(data, dataSize, 0, gazePoint, NULL, NULL, NULL, NULL, NULL, NULL);
+		std::cout << "Gaze Data - Timestamp: " << timestampMs << " Gaze Point: [" << gazePoint[0] << ", " << gazePoint[1] << "]" << std::endl;
+	}
+}
+
+int main() {
+	short workerId = pl_acquire_worker();
+	if (workerId < 0) {
+		std::cerr << "Failed to acquire worker." << std::endl;
+		return -1;
+	}
+	int res = pl_start_worker(workerId, "rtsp://192.168.1.27:8086", (1 << StreamId::SID_IMU) | (1 << StreamId::SID_GAZE), logCallback, dataCallback, NULL);
+	if (res < 0) {
+		std::cerr << "Failed to start worker." << std::endl;
+		return -1;
+	}
+	std::this_thread::sleep_for(std::chrono::seconds(5));
+	pl_stop_worker(workerId, true);
+	return 0;
+}
+```
+
+### C++ Overlay
 ```cpp
 #include <opencv2/opencv.hpp>
 #include <RTSPService.hh>
