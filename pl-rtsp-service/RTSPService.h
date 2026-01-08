@@ -1,9 +1,8 @@
 #pragma once
 
 #ifdef __ANDROID__
-#define PLRTSPSERVICE_API ""
+  #define PLRTSPSERVICE_API ""
 #elif defined(_WIN32) || defined(_WIN64)
-
   #ifdef PLRTSPSERVICE_EXPORTS
     #define PLRTSPSERVICE_API __declspec(dllexport)
   #else
