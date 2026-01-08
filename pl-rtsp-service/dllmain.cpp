@@ -1,10 +1,13 @@
-#include "liveMedia.hh"
+#include "H264VideoRTPSource.hh"
+#include "RTSPClient.hh"
 #include "LoggingUsageEnvironment.hh"
 #include <thread>
-#include <mutex>
-#include "RTSPService.hh"
+#include "RTSPService.h"
 #include <vector>
 #include <chrono>
+#include <string>
+#include <cstring>
+#include <stdexcept>
 
 typedef std::vector<u_int8_t>(*DataPostprocessor)(unsigned int size, const u_int8_t* unit);
 
@@ -799,7 +802,7 @@ int pl_bytes_to_eye_tracking_data(
 	float* eyeStateLeft, float* eyeStateRight,
 	float* eyelidLeft, float* eyelidRight
 ) {
-	int currentPos = offset;
+	unsigned int currentPos = offset;
 	currentPos = bytesToFloats(gazePoint, bytes, currentPos, 2);
 	currentPos = bytesToBooleans(worn, bytes, currentPos, 1);
 	if (currentPos == size) {
