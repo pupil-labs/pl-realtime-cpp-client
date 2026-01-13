@@ -7,8 +7,8 @@ SRC_DIR = pl-rtsp-service
 SONAME = libplrtclient.so
 DYNLIB = $(LIB_DIR)/$(SONAME)
 
-SOURCES = $(wildcard $(LOC_SRC_DIR)/*.cpp)
-HEADERS = $(wildcard $(LOC_SRC_DIR)/*.h*)
+SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
+HEADERS = $(wildcard $(SRC_DIR)/*.h*)
 
 INCLUDES_DIR = -I$(SRC_DIR) \
 			   -I$(INC_DIR)/liveMedia \
