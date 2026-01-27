@@ -116,6 +116,7 @@ static RTSPClient* openURL(UsageEnvironment& env, char const* progName, char con
 		env << "Failed to create a RTSP client for URL \"" << rtspURL << "\": " << env.getResultMsg() << "\n";
 		return NULL;
 	}
+    env << "Created a RTSP client for URL \"" << rtspURL << "\": " << env.getResultMsg() << "\n";
 
 	rtspClient->statusRef = SST_CLIENT_CREATED;
 
