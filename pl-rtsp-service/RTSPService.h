@@ -1,14 +1,23 @@
 #pragma once
 
 #ifdef __ANDROID__
-#define PLRTSPSERVICE_API ""
+  #define PLRTSPSERVICE_API ""
+#elif defined(_WIN32) || defined(_WIN64)
+  #ifdef PLRTSPSERVICE_EXPORTS
+    #define PLRTSPSERVICE_API __declspec(dllexport)
+  #else
+    #define PLRTSPSERVICE_API __declspec(dllimport)
+  #endif
+
+#elif defined(__GNUC__) || defined(__clang__)
+  #define PLRTSPSERVICE_API __attribute__((visibility("default")))
+
 #else
-#ifdef PLRTSPSERVICE_EXPORTS
-#define PLRTSPSERVICE_API __declspec(dllexport)
-#else
-#define PLRTSPSERVICE_API __declspec(dllimport)
+  #define PLRTSPSERVICE_API
 #endif
-#endif
+
+#include <stdint.h>
+#include <stdbool.h>
 
 typedef unsigned char u_int8_t;
 
@@ -49,7 +58,7 @@ enum EyeEventsDataType {
 	EEDT_UNKNOWN = -1
 };
 
-enum EtDataType : int {
+enum EtDataType {
 	EDT_GAZE_DATA = 0,
 	EDT_DUAL_MONOCULAR_GAZE_DATA = 1,
 	EDT_EYE_STATE_GAZE_DATA = 2,
@@ -82,6 +91,11 @@ enum RTPPayloadFormat {
 	PF_EYE_EVENTS = 101
 };
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Decodes raw data received from gaze stream.
  *
@@ -98,7 +112,7 @@ enum RTPPayloadFormat {
  *
  * @return type of received data (see EtDataType).
  */
-extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_tracking_data(
+PLRTSPSERVICE_API int pl_bytes_to_eye_tracking_data(
 	const u_int8_t* bytes,
 	unsigned int size,
 	unsigned int offset,
@@ -121,7 +135,7 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_tracking_data(
  *
  * @return type of received data (see EyeEventsDataType).
  */
-extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_event_data(
+PLRTSPSERVICE_API int pl_bytes_to_eye_event_data(
 	const u_int8_t* bytes,
 	unsigned int size,
 	unsigned int offset,
@@ -143,7 +157,7 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_event_data(
  *
  * @return type of received data (always 0).
  */
-extern "C" PLRTSPSERVICE_API int pl_bytes_to_imu_data(
+PLRTSPSERVICE_API int pl_bytes_to_imu_data(
 	const u_int8_t* bytes,
 	unsigned int size,
 	unsigned int offset,
@@ -158,7 +172,7 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_imu_data(
  *
  * @return The ID of a free worker thread, or -1 if none are available.
  */
-extern "C" PLRTSPSERVICE_API short pl_acquire_worker();
+PLRTSPSERVICE_API short pl_acquire_worker();
 
 /**
  * @brief Starts a worker thread that handles multiple data streams.
@@ -172,7 +186,7 @@ extern "C" PLRTSPSERVICE_API short pl_acquire_worker();
  *
  * @return 0 on success, or a non-zero error code on failure.
  */
-extern "C" PLRTSPSERVICE_API int pl_start_worker(u_int8_t id, const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
+PLRTSPSERVICE_API int pl_start_worker(u_int8_t id, const char* url, u_int8_t streamMask, LogCallback logCallback, RawDataCallback dataCallback, void* userData);
 
 /**
  * @brief Stops a specific worker thread.
@@ -180,16 +194,21 @@ extern "C" PLRTSPSERVICE_API int pl_start_worker(u_int8_t id, const char* url, u
  * @param[in] id       Identifier of the worker thread to stop.
  * @param[in] release  If true, the worker will be marked as available after stopping.
  */
-extern "C" PLRTSPSERVICE_API void pl_stop_worker(u_int8_t id, bool release);
+PLRTSPSERVICE_API void pl_stop_worker(u_int8_t id, bool release);
 
 /**
  * @brief Stops all worker threads and frees allocated resources.
  */
-extern "C" PLRTSPSERVICE_API void pl_stop_service();
+PLRTSPSERVICE_API void pl_stop_service();
 
 /**
  * @brief Returns the number of milliseconds elapsed since the Unix epoch (January 1, 1970, 00:00:00 UTC).
  *
  * @return Milliseconds since the Unix epoch.
  */
-extern "C" PLRTSPSERVICE_API int64_t pl_time_ms();
+PLRTSPSERVICE_API int64_t pl_time_ms();
+
+
+#ifdef __cplusplus
+}
+#endif

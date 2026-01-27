@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BasicUsageEnvironment.hh"
-#include "RTSPService.hh"
+#include "RTSPService.h"
 
 class LoggingUsageEnvironment : public BasicUsageEnvironment {
 public:
