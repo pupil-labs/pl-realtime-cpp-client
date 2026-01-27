@@ -40,7 +40,7 @@ $(DYNLIB): $(SOURCES) $(HEADERS)
 
 live555-bootstrap:
 	mkdir -p $(LIVE555_DIR)
-	( cd $(LIVE555_DIR) && cmake -G "Unix Makefiles" -DLIVE555_ENABLE_OPENSSL=ON -DLIVE555_BUILD_EXAMPLES=OFF -DLIVE555_BUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX="$(shell pwd)/$(BUILD_DIR)" ../../../live555)
+	( cd $(LIVE555_DIR) && cmake -G "Unix Makefiles" -DLIVE555_ENABLE_OPENSSL=OFF -DLIVE555_BUILD_EXAMPLES=OFF -DLIVE555_BUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX="$(shell pwd)/$(BUILD_DIR)" ../../../live555)
 	( cd $(LIVE555_DIR) && cmake --build . && cmake --install . )
 
 clean:
