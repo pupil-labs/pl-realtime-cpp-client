@@ -795,6 +795,7 @@ int pl_bytes_to_eye_tracking_data(
 	unsigned int size,
 	unsigned int offset,
 	float* gazePoint, bool* worn,
+	float* gazePointDualLeft,
 	float* gazePointDualRight,
 	float* eyeStateLeft, float* eyeStateRight,
 	float* eyelidLeft, float* eyelidRight
@@ -806,8 +807,14 @@ int pl_bytes_to_eye_tracking_data(
 		return EDT_GAZE_DATA;
 	}
 	if (currentPos + 8 == size) {
+		bytesToFloats(gazePointDualLeft, bytes, offset, 2);
 		currentPos = bytesToFloats(gazePointDualRight, bytes, currentPos, 2);
 		return EDT_DUAL_MONOCULAR_GAZE_DATA;
+	}
+	if (currentPos + 16 == size) {
+		currentPos = bytesToFloats(gazePointDualLeft, bytes, currentPos, 2);
+		currentPos = bytesToFloats(gazePointDualRight, bytes, currentPos, 2);
+		return EDT_BINO_AND_DUAL_MONO_GAZE_DATA;
 	}
 	currentPos = bytesToFloats(eyeStateLeft, bytes, currentPos, 7);
 	currentPos = bytesToFloats(eyeStateRight, bytes, currentPos, 7);
@@ -818,6 +825,11 @@ int pl_bytes_to_eye_tracking_data(
 	currentPos = bytesToFloats(eyelidRight, bytes, currentPos, 3);
 	if (currentPos == size) {
 		return EDT_EYE_STATE_EYELID_GAZE_DATA;
+	}
+	currentPos = bytesToFloats(gazePointDualLeft, bytes, currentPos, 2);
+	currentPos = bytesToFloats(gazePointDualRight, bytes, currentPos, 2);
+	if (currentPos == size) {
+		return EDT_EYE_STATE_EYELID_DUAL_MONO_GAZE_DATA;
 	}
 	return EDT_UNKNOWN;
 }

@@ -52,8 +52,10 @@ enum EyeEventsDataType {
 enum EtDataType : int {
 	EDT_GAZE_DATA = 0,
 	EDT_DUAL_MONOCULAR_GAZE_DATA = 1,
-	EDT_EYE_STATE_GAZE_DATA = 2,
-	EDT_EYE_STATE_EYELID_GAZE_DATA = 3,
+	EDT_BINO_AND_DUAL_MONO_GAZE_DATA = 2,
+	EDT_EYE_STATE_GAZE_DATA = 3,
+	EDT_EYE_STATE_EYELID_GAZE_DATA = 4,
+	EDT_EYE_STATE_EYELID_DUAL_MONO_GAZE_DATA = 5,
 	EDT_UNKNOWN = -1
 };
 
@@ -90,6 +92,7 @@ enum RTPPayloadFormat {
  *
  * @param[out] gazePoint            Pointer to a float array where gaze point (x, y) will be set (binocular, or left eye in case of dual-monocular gaze data).
  * @param[out] worn                 Pointer to a bool where the worn flag will be set.
+ * @param[out] gazePointDualLeft    Pointer to a float array where gaze point (x, y) for left eye will be set (in case of dual-monocular gaze data).
  * @param[out] gazePointDualRight   Pointer to a float array where gaze point (x, y) for right eye will be set (in case of dual-monocular gaze data).
  * @param[out] eyeStateLeft         Pointer to float array of 7 elements where left eye state (pupil diameter, eyeball center [x, y, z], optical axis [x, y, z]) will be set.
  * @param[out] eyeStateRight        Same as eyeStateLeft but for the right eye.
@@ -103,6 +106,7 @@ extern "C" PLRTSPSERVICE_API int pl_bytes_to_eye_tracking_data(
 	unsigned int size,
 	unsigned int offset,
 	float* gazePoint, bool* worn,
+	float* gazePointDualLeft,
 	float* gazePointDualRight,
 	float* eyeStateLeft, float* eyeStateRight,
 	float* eyelidLeft, float* eyelidRight
