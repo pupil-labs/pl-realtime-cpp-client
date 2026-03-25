@@ -11,22 +11,18 @@ void LoggingUsageEnvironment::writeFormatted(const char* format, ...) {
 	if (callback != NULL) {
 		va_list args;
 		va_start(args, format);
-		int len = vsnprintf(NULL, 0, format, args); //does not include null terminator
-		if (len > 0 && len < BUFFER_SIZE) { //process only not empty messages that can fit the buffer
-			if (bufferOffset + len >= BUFFER_SIZE) { //flush buffer if remaining space is not sufficient
-				bufferOffset = 0;
-				callback(buffer, userData);
-			}
 #ifdef __ANDROID__
-			bufferOffset += vsprintf(buffer + bufferOffset, format, args);
+        bufferOffset += vsprintf(buffer + bufferOffset, format, args);
+#elif defined(__GNUC__) || defined(__clang__)
+        bufferOffset += vsnprintf(buffer + bufferOffset, BUFFER_SIZE - bufferOffset, format, args);
 #else
-			bufferOffset += vsprintf_s(buffer + bufferOffset, BUFFER_SIZE - bufferOffset, format, args);
+        bufferOffset += vsprintf_s(buffer + bufferOffset, BUFFER_SIZE - bufferOffset, format, args);
 #endif
-			if (buffer[bufferOffset - 1] == '\n') { //flush each line
-				bufferOffset = 0;
-				callback(buffer, userData);
-			}
-		}
+        if (buffer[bufferOffset - 1] == '\n') { //flush each line
+            buffer[bufferOffset - 1] = '\0';
+            bufferOffset = 0;
+            callback(buffer, userData);
+        }
 		va_end(args);
 	}
 }
