@@ -638,6 +638,11 @@ T convertBytes(const u_int8_t* bytes, bool srcIsLittleEndian) {
 	return result;
 }
 
+template<>
+bool convertBytes<bool>(const u_int8_t* bytes, bool) {
+    return bytes[0] != 0;
+}
+
 template<typename T>
 unsigned int bytesToArray(T* dest, const u_int8_t* src, unsigned int startSrc, unsigned int count, bool srcIsLittleEndian) {
 	unsigned int currentPos = startSrc;
